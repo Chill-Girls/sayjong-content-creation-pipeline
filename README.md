@@ -1,98 +1,33 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# SAYJONG 콘텐츠 생성 파이프라인 (Content Creation Pipeline)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+## 📌 1. 이 서버는 무엇인가요?
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+이 프로젝트는 **SAYJONG (세종) 서비스의 학습 콘텐츠 생성을 전담하는 별도의 워커(Worker) 서버**입니다.
 
-## Description
+사용자가 새로운 K-POP 노래 학습을 요청했을 때, 해당 노래의 가사, 발음, 번역, 원어민 음성 등 학습에 필요한 모든 데이터를 자동으로 가공하고 생성하는 역할을 수행합니다. 이 서버는 외부 API 엔드포인트를 열어두는 전통적인 API 서버가 아니라, 메시지 큐(Message Queue)로부터 작업 요청을 받아 처리하는 **백그라운드 소비자(Consumer)** 입니다.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## 🤔 2. 왜 별도의 서버가 필요한가요?
 
-## Project setup
+학습 콘텐츠를 생성하는 과정은 여러 외부 API를 호출하고 데이터를 가공해야 하는, 상대적으로 시간이 오래 걸리고 불안정할 수 있는 작업입니다. 이러한 작업을 메인 API 서버(Spring)가 직접 처리하게 되면 다음과 같은 문제가 발생할 수 있습니다.
 
-```bash
-$ npm install
-```
+* **성능 저하**: 무거운 콘텐츠 생성 작업이 메인 서버의 리소스를 점유하여, 로그인, 발음 연습 등 다른 사용자들의 핵심 기능 사용에 대한 응답 속도를 느리게 만듭니다.
+* **서비스 불안정**: 외부 API(Spotify, DeepL 등) 중 하나라도 응답이 지연되거나 오류가 발생하면, 그 영향이 메인 서버 전체로 퍼져 서비스가 멈출 수 있습니다.
+* **비효율적인 확장**: 콘텐츠 생성 요청이 많아진다고 해서 서비스 전체를 확장하는 것은 비용과 자원 측면에서 비효율적입니다.
 
-## Compile and run the project
+이러한 문제들을 해결하기 위해, 콘텐츠 생성이라는 무겁고 독립적인 작업을 별도의 서버로 분리했습니다. 이를 통해 다음과 같은 이점을 얻을 수 있습니다.
 
-```bash
-# development
-$ npm run start
+1.  **안정성 확보 (Decoupling)**: 파이프라인 서버에 문제가 발생하더라도, 메인 서비스는 전혀 영향을 받지 않고 안정적으로 운영됩니다.
+2.  **최적의 성능 유지 (Performance)**: 메인 서버는 가벼운 핵심 기능에만 집중하여 모든 사용자에게 쾌적한 경험을 제공합니다.
+3.  **유연한 확장성 (Scalability)**: 추후 콘텐츠 생성 요청이 폭증할 경우, 다른 부분은 그대로 두고 이 워커 서버의 인스턴스만 늘려서 병렬로 작업을 처리하면 되므로 효율적이고 경제적인 확장이 가능합니다.
 
-# watch mode
-$ npm run start:dev
+## 🛠️ 3. 어떻게 동작하나요?
+(일단 이렇게 설계만 해놨어요.)
 
-# production mode
-$ npm run start:prod
-```
-
-## Run tests
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+1.  **요청**: 사용자가 새로운 노래 학습을 요청하면, 메인 **Spring 서버**는 이 요청을 **메시지 큐(Message Queue)**에 작업(Job)으로 등록합니다.
+2.  **처리**: **NestJS 워커 서버**(본 프로젝트)는 큐를 계속 감시하다가 새로운 작업이 들어오면 이를 가져와 아래의 콘텐츠 생성 파이프라인을 실행합니다.
+    * **Spotify API**: 가사 및 싱크 타이밍 정보 추출
+    * **es-hangul 라이브러리**: 한글 가사를 로마자 발음 표기로 변환
+    * **DeepL API**: 가사를 영어로 번역
+    * **ElevenLabs API**: 원어민 발음(TTS) 음성 파일 생성 후 클라우드 스토리지에 업로드 및 URL 반환
+3.  **완료 및 전송**: 모든 데이터 생성이 완료되면, 워커 서버는 **클라이언트**가 되어 Spring 서버의 `/api/contents/complete` 와 같은 특정 엔드포인트로 **완성된 데이터 전체**를 POST 요청으로 전송합니다.
+4.  **저장**: Spring 서버는 워커로부터 받은 최종 데이터를 검증한 후 데이터베이스에 저장합니다.
