@@ -17,5 +17,13 @@
   "bugs": {
     "url": "https://github.com/Chill-Girls/sayjong-content-creation-pipeline/issues"
   },
-  "homepage": "https://github.com/Chill-Girls/sayjong-content-creation-pipeline#readme"
+  "homepage": "https://github.com/Chill-Girls/sayjong-content-creation-pipeline#readme",
+  "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.20.1",
+    "@google-cloud/storage": "^7.17.2",
+    "deepl-node": "^1.20.0",
+    "dotenv": "^17.2.3",
+    "es-hangul": "^2.3.8",
+    "zod": "^4.1.12"
+  }
 }
