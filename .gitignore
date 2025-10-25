@@ -10,5 +10,9 @@ logs
 # OS
 .DS_Store
 
-# dotenv environment variable files
+# environment variable files
 .env
+secrets/
+
+# temporary
+tmp/
