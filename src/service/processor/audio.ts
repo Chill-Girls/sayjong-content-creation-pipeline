@@ -63,51 +63,53 @@ class AudioService {
     }
 
     console.log(`[AudioService] TTS 생성 요청: "${trimmedText}"`);
+    //TODO: 나중에 rate limit 해결되면 처리
+    return "PENDING_TTS_URL";
 
-    try {
-      const audioStream = await this.client.textToSpeech.stream(
-        this.KOREAN_VOICE_ID,
-        {
-          text: trimmedText,
-          modelId: "eleven_multilingual_v2",
-        }
-      );
+    // try {
+    //   const audioStream = await this.client.textToSpeech.stream(
+    //     this.KOREAN_VOICE_ID,
+    //     {
+    //       text: trimmedText,
+    //       modelId: "eleven_multilingual_v2",
+    //     }
+    //   );
 
-      const gcsFilePath = `tts/${crypto.randomUUID()}.mp3`;
-      const file = this.bucket.file(gcsFilePath);
-      const gcsWriteStream = file.createWriteStream({
-        contentType: "audio/mpeg",
-      });
-      const nodeAudioStream = Readable.fromWeb(audioStream as any);
-      nodeAudioStream.pipe(gcsWriteStream);
+    //   const gcsFilePath = `tts/${crypto.randomUUID()}.mp3`;
+    //   const file = this.bucket.file(gcsFilePath);
+    //   const gcsWriteStream = file.createWriteStream({
+    //     contentType: "audio/mpeg",
+    //   });
+    //   const nodeAudioStream = Readable.fromWeb(audioStream as any);
+    //   nodeAudioStream.pipe(gcsWriteStream);
 
-      return new Promise((resolve, reject) => {
-        gcsWriteStream.on("finish", () => {
-          const publicUrl = `https://storage.googleapis.com/${this.bucketName}/${gcsFilePath}`;
-          this.audioCache.set(trimmedText, publicUrl);
-          resolve(publicUrl);
-        });
-        gcsWriteStream.on("error", (error) => {
-          console.error("[AudioService] 파일 쓰기 스트림 에러:", error);
-          reject(error);
-        });
-        nodeAudioStream.on("error", (error) => {
-          console.error("[AudioService] ElevenLabs API 스트림 에러:", error);
-          reject(error);
-        });
-      });
-    } catch (error) {
-      console.error(
-        `[AudioService] ElevenLabs TTS 생성 실패 (text: ${text}):`,
-        error
-      );
-      if (error instanceof Error) {
-        throw new Error(`ElevenLabs TTS failed: ${error.message}`);
-      }
-      throw new Error(
-        `ElevenLabs TTS failed: ${String(error) || "Unknown error"}`
-      );
-    }
+    //   return new Promise((resolve, reject) => {
+    //     gcsWriteStream.on("finish", () => {
+    //       const publicUrl = `https://storage.googleapis.com/${this.bucketName}/${gcsFilePath}`;
+    //       this.audioCache.set(trimmedText, publicUrl);
+    //       resolve(publicUrl);
+    //     });
+    //     gcsWriteStream.on("error", (error) => {
+    //       console.error("[AudioService] 파일 쓰기 스트림 에러:", error);
+    //       reject(error);
+    //     });
+    //     nodeAudioStream.on("error", (error) => {
+    //       console.error("[AudioService] ElevenLabs API 스트림 에러:", error);
+    //       reject(error);
+    //     });
+    //   });
+    // } catch (error) {
+    //   console.error(
+    //     `[AudioService] ElevenLabs TTS 생성 실패 (text: ${text}):`,
+    //     error
+    //   );
+    //   if (error instanceof Error) {
+    //     throw new Error(`ElevenLabs TTS failed: ${error.message}`);
+    //   }
+    //   throw new Error(
+    //     `ElevenLabs TTS failed: ${String(error) || "Unknown error"}`
+    //   );
+    // }
   }
 }
 
