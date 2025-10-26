@@ -6,12 +6,14 @@ import { translationService } from "./processor/translation";
 import { audioService } from "./processor/audio";
 import { ContentCreationRequest } from "../dto/content.request.dto";
 import {
+  ProcessedLyricSyllable,
   ProcessedLyricLine,
   ContentSuccessResult,
+  ContentFailResult,
 } from "../dto/content.response.dto";
 
 class PipelineService {
-  public async run(request: ContentCreationRequest): Promise<void> {
+  public async run(request: ContentCreationRequest) {
     const { songId, trackId, title } = request;
 
     try {
@@ -33,23 +35,56 @@ class PipelineService {
         originalLyricsTexts
       );
 
-      // 2c. 가사 소절별 병렬 처리 (로마자, 오디오)
+      // 2c. 가사 소절별 처리 (로마자, 오디오)
       // NOTE: rate limit을 피하기 위해 순차 처리로 진행
       const processedLines: ProcessedLyricLine[] = [];
-      lyricsData.forEach(async ({ words, startTimeMs }, idx) => {
+
+      for (const [idx, lineData] of lyricsData.entries()) {
+        const { words, startTimeMs } = lineData;
         const originalText = words;
+
+        console.log(
+          `[Pipeline] Processing line ${idx + 1}/${
+            lyricsData.length
+          }: "${originalText}"`
+        );
+
+        // --- 2c-1. 소절(Line) 전체 단위 처리 ---
         const romanizedText = romanizeService.convert(originalText);
-        const audioUrl = await audioService.createTTS(originalText);
+        const audioUrl = await audioService.createTTS(originalText); // 소절 전체 오디오
+        const translatedText = translatedLyricsTexts[idx];
+
+        // --- 2c-2. 음절(Syllable) 단위 처리 ---
+        const characters = originalText.split("");
+        const processedSyllables: ProcessedLyricSyllable[] = [];
+
+        // 음절도 순차 처리 (TTS API Rate Limit 회피)
+        for (const char of characters) {
+          const syllableText = char;
+          if (!this.hasKorean(syllableText)) {
+            continue;
+          }
+          const syllableRomanized = romanizeService.convert(syllableText);
+          const syllableAudioUrl = await audioService.createTTS(syllableText); // *음절* 오디오
+
+          processedSyllables.push({
+            textKor: syllableText,
+            romanized: syllableRomanized,
+            nativeAudio: syllableAudioUrl,
+          });
+        }
+
+        // --- 2c-3. 최종 소절 데이터 취합 ---
         processedLines.push({
           startTime: startTimeMs,
           words: originalText,
           romanized: romanizedText,
-          translated: translatedLyricsTexts[idx],
+          translated: translatedText,
           nativeAudio: audioUrl,
+          syllables: processedSyllables,
         });
-      });
+      }
 
-      // --- 3. Spring에 성공 콜백 ---
       const successPayload: ContentSuccessResult = {
         songId: songId,
         title: title,
@@ -57,14 +92,18 @@ class PipelineService {
         lines: processedLines,
       };
 
-      //TODO: remove this. (for debugging)
-      await this.saveDebugFile(successPayload, title);
-
-      //TODO: spring call back
-
+      // this.saveDebugFile(successPayload, `${songId}_${title}`); //TODO: remove this. (for debugging)
       console.log(`[Pipeline] Successfully finished job for songId: ${songId}`);
+      return successPayload;
     } catch (error) {
-      //TODO: spring call back
+      const failPayload: ContentFailResult = {
+        songId: songId,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unknown error occurred during processing.",
+      };
+      return failPayload;
     }
   }
 
@@ -87,7 +126,7 @@ class PipelineService {
       .replace(/-/g, "")
       .replace(" ", "_")
       .replace(/:/g, "");
-    const filename = `${prefix}_KST_${timestamp}.json`;
+    const filename = `${prefix}_${timestamp}.json`;
 
     // 2. 저장 경로 설정 (프로젝트 루트/tmp)
     const outputDir = path.join(__dirname, "..", "..", "tmp");
@@ -99,6 +138,11 @@ class PipelineService {
 
     // 4. 파일 쓰기
     await fs.writeFile(outputPath, payloadJson, "utf-8");
+  }
+
+  private hasKorean(text: string): boolean {
+    const HANGUL_REGEX = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/;
+    return HANGUL_REGEX.test(text);
   }
 }
 
