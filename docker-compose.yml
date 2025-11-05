@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  worker:
+    # 현재 디렉토리의 Dockerfile을 사용하여 빌드
+    build: .
+    container_name: sayjong-tts-worker
+    
+    volumes:
+      - ./logs:/usr/src/app/logs
+      - ./.env:/usr/src/app/.env:ro
+      - ./secrets/sayjong-4c58c8f659a5.json:/usr/src/app/gcp-service-key.json:ro
+
+    environment:
+      - GCP_SERVICE_KEY_PATH=/usr/src/app/gcp-service-key.json
