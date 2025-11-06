@@ -3,7 +3,7 @@ dotenv.config();
 
 import express, { Request, Response } from "express";
 import { pipelineService } from "./service/pipeline.service";
-import { ttsService } from "./service/tts-processor";
+import { syllableTTSService } from "./service/tts/syllable-tts-processor";
 import {
   contentCreationRequestSchema,
   ContentCreationRequest,
@@ -57,7 +57,7 @@ app.listen(PORT, () => {
   console.log(`Content Creation Pipeline server listening on port ${PORT}`);
 
   try {
-    ttsService.startCron("* * * * *"); // 1분마다 실행
+    syllableTTSService.startCron("* * * * *"); // 1분마다 실행
   } catch (error) {
     console.error("Failed to initialize or start TtsProcessor:", error);
     process.exit(1);

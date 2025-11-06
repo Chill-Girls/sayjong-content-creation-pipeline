@@ -17,7 +17,7 @@ interface SSMLResult {
   indexToSyllableMap: Record<string, string>; // split() 결과 인덱스, 해당 문자
 }
 
-class TTSProcessor {
+class LineTTSProcessor {
   private dbPool: mysql.Pool;
   private ttsClient: v1beta1.TextToSpeechClient;
   private bucket: Bucket;
@@ -260,4 +260,4 @@ class TTSProcessor {
   }
 }
 
-export const ttsService = new TTSProcessor();
+export const lineTTSService = new LineTTSProcessor();
