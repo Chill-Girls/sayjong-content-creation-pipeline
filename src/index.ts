@@ -3,7 +3,7 @@ dotenv.config();
 
 import express, { Request, Response } from "express";
 import { pipelineService } from "./service/pipeline.service";
-import { syllableTTSService } from "./service/tts/syllable-tts-processor";
+import { syllableTTSService } from "./service/tts/syllable-tts";
 import {
   contentCreationRequestSchema,
   ContentCreationRequest,
