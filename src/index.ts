@@ -3,7 +3,6 @@ dotenv.config();
 
 import express, { Request, Response } from "express";
 import { pipelineService } from "./service/pipeline.service";
-import { syllableTTSService } from "./service/tts/syllable-tts";
 import {
   contentCreationRequestSchema,
   ContentCreationRequest,
@@ -12,6 +11,7 @@ import {
   ContentSuccessResult,
   ContentFailResult,
 } from "./dto/content.response.dto";
+import { elevenlabsTTSService } from "./service/tts/elevenlabs-line-tts";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -57,7 +57,8 @@ app.listen(PORT, () => {
   console.log(`Content Creation Pipeline server listening on port ${PORT}`);
 
   try {
-    syllableTTSService.startCron("* * * * *"); // 1분마다 실행
+    elevenlabsTTSService.startCron("* * * * *"); // 1분마다 실행
+    // elevenlabsTTSService.startCron("*/3 * * * *"); // 3분마다 실행
   } catch (error) {
     console.error("Failed to initialize or start TtsProcessor:", error);
     process.exit(1);
