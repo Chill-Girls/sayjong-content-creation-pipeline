@@ -8,9 +8,17 @@ import {
   ContentCreationRequest,
 } from "./dto/content.request.dto";
 import {
+  SongTimingCreationRequest,
+  songTimingCreationRequestSchema,
+} from "./dto/song.request.dto";
+import {
   ContentSuccessResult,
   ContentFailResult,
 } from "./dto/content.response.dto";
+import {
+  LineTTSCreationRequest,
+  lineTTSCreationRequestSchema,
+} from "./dto/line.request.dto";
 import { elevenlabsTTSService } from "./service/tts/elevenlabs-line-tts";
 
 const app = express();
@@ -53,12 +61,36 @@ app.post("/create-content", async (req: Request, res: Response) => {
   }
 });
 
+app.post("/tts", async (req: Request, res: Response) => {
+  try {
+    const validationResult = lineTTSCreationRequestSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({
+        message: "Invalid content creation request data.",
+        errors: validationResult.error,
+      });
+    }
+
+    const creationRequest: LineTTSCreationRequest = validationResult.data;
+    console.log("[Worker] Job accepted:", creationRequest);
+    await elevenlabsTTSService.retryOne(
+      creationRequest.lyricLineId,
+      creationRequest.lyricText
+    );
+    return res.status(201).end();
+  } catch (error) {
+    console.error("Failed to accept job:", error);
+    if (!res.headersSent) {
+      res.status(400).json({ message: "Bad request." });
+    }
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Content Creation Pipeline server listening on port ${PORT}`);
 
   try {
-    elevenlabsTTSService.startCron("* * * * *"); // 1분마다 실행
-    // elevenlabsTTSService.startCron("*/3 * * * *"); // 3분마다 실행
+    //  elevenlabsTTSService.startCron("* * * * *"); // 1분마다
   } catch (error) {
     console.error("Failed to initialize or start TtsProcessor:", error);
     process.exit(1);

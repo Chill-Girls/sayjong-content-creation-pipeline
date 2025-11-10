@@ -56,6 +56,27 @@ class ElevenLabsTTSProcessor {
     this.bucket = storage.bucket(this.bucketName);
   }
 
+  public async retryOne(lyricLineId: number, lyricText: string) {
+    console.log(`[${new Date().toISOString()}] TTS Job started...`);
+    let connection: mysql.PoolConnection | null = null;
+    try {
+      connection = await this.dbPool.getConnection();
+      const rows = await this.fetchLyricById(connection, lyricLineId);
+      if (rows.length !== 1) {
+        console.log(`Fetch Lyric By Id Failed ${lyricLineId}`);
+        return;
+      }
+      await this.processSingleLine(connection, rows[0], lyricText);
+    } catch (error) {
+      console.error("Critical error during job execution:", error);
+    } finally {
+      if (connection) {
+        connection.release();
+      }
+      console.log("TTS job finished.");
+    }
+  }
+
   public startCron(schedule: string) {
     console.log(`Cron job scheduled with schedule: "${schedule}"`);
     cron.schedule(schedule, () => {
@@ -84,7 +105,8 @@ class ElevenLabsTTSProcessor {
       }
 
       for (const row of rows) {
-        await this.processSingleLine(connection, row);
+        const refinedText = this.refineLyric(row.original_text);
+        await this.processSingleLine(connection, row, refinedText);
       }
     } catch (error) {
       console.error("Critical error during job execution:", error);
@@ -97,12 +119,12 @@ class ElevenLabsTTSProcessor {
   }
   private async processSingleLine(
     connection: mysql.PoolConnection,
-    row: LyricLineRow
+    row: LyricLineRow,
+    refinedText: string
   ) {
     const { lyric_line_id, original_text } = row;
     console.log(`Processing ID: ${lyric_line_id} ("${original_text}")`);
 
-    const refinedText = this.refineLyric(original_text);
     if (!refinedText) {
       console.log(
         `[SKIP] 한글 없음: ID ${lyric_line_id} ("${original_text}")("${refinedText}")`
@@ -130,7 +152,7 @@ class ElevenLabsTTSProcessor {
           modelId: "eleven_multilingual_v2",
           voiceSettings: {
             speed: 0.7,
-            stability: 0.6, // 감정/억양
+            stability: 0.9, // 감정/억양
             useSpeakerBoost: true,
             similarityBoost: 0.75, // 목소리 유사도 유지
             style: 0, // 과장 없음
@@ -236,6 +258,20 @@ class ElevenLabsTTSProcessor {
           WHERE native_audio_url LIKE '%google-lyrics%' OR native_audio_url LIKE '%RETRY%'
           LIMIT ?`,
       [limit]
+    );
+    return rows as LyricLineRow[];
+  }
+
+  private async fetchLyricById(
+    connection: mysql.PoolConnection,
+    lyricLineId: number
+  ): Promise<LyricLineRow[]> {
+    const [rows] = await connection.query<mysql.RowDataPacket[]>(
+      `SELECT lyric_line_id, original_text, native_audio_url
+          FROM lyric_line
+          WHERE lyric_line_id = ?
+      `,
+      [lyricLineId]
     );
     return rows as LyricLineRow[];
   }
