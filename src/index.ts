@@ -20,6 +20,7 @@ import {
   lineTTSCreationRequestSchema,
 } from "./dto/line.request.dto";
 import { elevenlabsTTSService } from "./service/tts/elevenlabs-line-tts";
+import { songTimingService } from "./service/timing/song-timing";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -81,7 +82,31 @@ app.post("/tts", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Failed to accept job:", error);
     if (!res.headersSent) {
-      res.status(400).json({ message: "Bad request." });
+      res.status(400).json({ message: "Bad request." }).end();
+    }
+  }
+});
+
+app.post("/song-timing", async (req: Request, res: Response) => {
+  try {
+    const validationResult = songTimingCreationRequestSchema.safeParse(
+      req.body
+    );
+    if (!validationResult.success) {
+      return res.status(400).json({
+        message: "Invalid content creation request data.",
+        errors: validationResult.error,
+      });
+    }
+
+    const creationRequest: SongTimingCreationRequest = validationResult.data;
+    console.log("[Worker] Job accepted:", creationRequest);
+    await songTimingService.generate(creationRequest.songId);
+    return res.status(201).end();
+  } catch (error) {
+    console.error("Failed to accept job:", error);
+    if (!res.headersSent) {
+      res.status(400).json({ message: "Bad request." }).end();
     }
   }
 });

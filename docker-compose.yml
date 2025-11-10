@@ -5,6 +5,9 @@ services:
     # 현재 디렉토리의 Dockerfile을 사용하여 빌드
     build: .
     container_name: sayjong-tts-worker
+
+    ports:
+      - "3000:3000" 
     
     volumes:
       - ./logs:/usr/src/app/logs
