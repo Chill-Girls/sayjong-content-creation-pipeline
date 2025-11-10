@@ -233,7 +233,7 @@ class ElevenLabsTTSProcessor {
     const [rows] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT lyric_line_id, original_text, native_audio_url
           FROM lyric_line
-          WHERE native_audio_url LIKE '%google-lyrics%' OR '%RETRY%'
+          WHERE native_audio_url LIKE '%google-lyrics%' OR native_audio_url LIKE '%RETRY%'
           LIMIT ?`,
       [limit]
     );
