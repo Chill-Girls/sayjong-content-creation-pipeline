@@ -85,10 +85,15 @@ class SongTimingService {
         return;
       }
 
+      const fullLyricsText = lyrics
+        .map((line) => this.refineTextForPython(line.original_text))
+        .join(` ${this.LINE_SEPARATOR} `);
+
       const resultWithTimings = await this.getSyllableTimings(
         lyrics,
         song.song_url,
-        song.song_id
+        song.song_id,
+        fullLyricsText
       );
 
       console.log(
@@ -113,6 +118,115 @@ class SongTimingService {
     }
   }
 
+  public async generateFallback(songId: number) {
+    console.log(`[SongTiming Fallback] Job starting for songId: ${songId}`);
+    let connection: mysql.PoolConnection | null = null;
+    try {
+      connection = await this.dbPool.getConnection();
+      const songRows = await this.fetchSongById(connection, songId);
+      if (songRows.length !== 1) {
+        throw new Error(`Song with songId ${songId} not found.`);
+      }
+      const song = songRows[0];
+
+      const lyrics = await this.fetchLyrics(connection, songId);
+      if (lyrics.length === 0) {
+        console.log(
+          `[SongTiming Fallback] No lyrics found for songId: ${songId}.`
+        );
+        return;
+      }
+
+      const fullLyricsText = lyrics
+        .map((line) => line.original_text)
+        .join(` ${this.LINE_SEPARATOR} `);
+
+      const resultWithTimings = await this.getSyllableTimings(
+        lyrics,
+        song.song_url,
+        song.song_id,
+        fullLyricsText
+      );
+
+      // 한국어 가사 균등 분배
+      const refinedResultWithTimings = resultWithTimings.map(
+        (result, lineIdx) => {
+          const originTimings = result.timings;
+
+          // .flatMap()을 사용하여 각 단어(timing)를 여러 음절(syllable) 타이밍으로 변환
+          const refinedTimings = originTimings.flatMap((timing, wordIdx) => {
+            const syllables = timing.markName
+              .split(/(?=[가-힣])/)
+              .filter(Boolean);
+            const syllableCount = syllables.length;
+
+            if (syllableCount <= 1) {
+              return timing; // 원본 타이밍("Don't", "한", "♪")을 그대로 반환
+            }
+
+            // --- 이 단어의 끝(end) 시간 찾기 ---
+            let endTime: number;
+            const startTime = timing.timeSeconds;
+
+            if (wordIdx < originTimings.length - 1) {
+              // (줄의 마지막 단어가 아님: 다음 단어의 시작 시간
+              endTime = originTimings[wordIdx + 1].timeSeconds;
+            } else if (lineIdx < resultWithTimings.length - 1) {
+              // 줄의 마지막 단어 + 마지막 줄이 아님: 다음 줄의 첫 단어 시작 시간
+              const nextLine = resultWithTimings[lineIdx + 1];
+              if (nextLine.timings.length > 0) {
+                endTime = nextLine.timings[0].timeSeconds;
+              } else {
+                // 다음 줄에 가사가 없으면 1초의 기본 기간 부여
+                endTime = startTime + 1.0;
+              }
+            } else {
+              // 노래의 마지막 줄 + 마지막 단어: 1초의 기본 기간 부여
+              endTime = startTime + 1.0;
+            }
+
+            // 시작 시간과 끝 시간이 같은 경우 0이 되도록 함
+            const duration = Math.max(0, endTime - startTime);
+            const syllableDuration = duration / syllableCount;
+
+            // 각 음절에 대한 새 타이밍 객체 배열 생성
+            return syllables.map((syllable, sIdx) => ({
+              timeSeconds: startTime + syllableDuration * sIdx,
+              markName: syllable,
+            }));
+          });
+
+          // 새롭게 만들어진 refinedTimings 배열로 라인 객체 재구성
+          return {
+            originalText: result.originalText,
+            refinedText: refinedTimings.map((t) => t.markName).join(" "), // "마 시 고"
+            timings: refinedTimings,
+          };
+        }
+      );
+
+      console.log(
+        `[SongTiming Fallback] Successfully generated timings for songId: ${songId}.`
+      );
+      console.log(JSON.stringify(refinedResultWithTimings, null, 2)); // 결과 확인용
+      await this.updateSongTimings(
+        connection,
+        songId,
+        JSON.stringify(refinedResultWithTimings)
+      );
+    } catch (error) {
+      console.error(
+        `[SongTiming Fallback] Critical error during job for songId: ${songId}`,
+        error
+      );
+    } finally {
+      if (connection) {
+        connection.release();
+      }
+      console.log(`[SongTiming Fallback] Job finished for songId: ${songId}.`);
+    }
+  }
+
   private refineTextForPython(text: string): string {
     // [가-힣] : 한글 음절 1개
     // |        : 또는
@@ -131,12 +245,9 @@ class SongTimingService {
   private async getSyllableTimings(
     lyrics: LyricLineRow[],
     songUrl: string,
-    songId: number
+    songId: number,
+    fullLyricsText: string
   ): Promise<LyricWithTimings[]> {
-    const fullLyricsText = lyrics
-      .map((line) => this.refineTextForPython(line.original_text))
-      .join(` ${this.LINE_SEPARATOR} `);
-
     const localAudioPath = await this.downloadAudio(songUrl, songId);
     let allPythonResults: PythonTimingResult[] = [];
 

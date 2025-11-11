@@ -111,6 +111,30 @@ app.post("/song-timing", async (req: Request, res: Response) => {
   }
 });
 
+app.post("/song-timing-fallback", async (req: Request, res: Response) => {
+  try {
+    const validationResult = songTimingCreationRequestSchema.safeParse(
+      req.body
+    );
+    if (!validationResult.success) {
+      return res.status(400).json({
+        message: "Invalid content creation request data.",
+        errors: validationResult.error,
+      });
+    }
+
+    const creationRequest: SongTimingCreationRequest = validationResult.data;
+    console.log("[Worker] Job accepted:", creationRequest);
+    await songTimingService.generateFallback(creationRequest.songId);
+    return res.status(201).end();
+  } catch (error) {
+    console.error("Failed to accept job:", error);
+    if (!res.headersSent) {
+      res.status(400).json({ message: "Bad request." }).end();
+    }
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Content Creation Pipeline server listening on port ${PORT}`);
 
